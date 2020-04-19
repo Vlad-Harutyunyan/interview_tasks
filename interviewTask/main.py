@@ -1,10 +1,13 @@
-import threading
+import threading 
+from threading import Semaphore
 import time
 import random 
 
 lock = threading.Lock
 
 qu = []
+MAX_BUFF = 100
+s = Semaphore()
 
 class ProducerThread(threading.Thread):
     def __init__(self, group=None, target=None, name=None,
@@ -12,17 +15,21 @@ class ProducerThread(threading.Thread):
         super(ProducerThread,self).__init__()
         self.target = target
         self.name = name
+        global queue
+        
 
     def run(self):
         while True:
-            if q.size() < 100:
+            if len(qu) <= 100:
                 item = random.randint(1,100)
                 qu.append(item)
                 print('Putting  {} elements in queue'.format(len(qu)) )
+                s.release()
                 time.sleep(random.random())
-            elif 100 < q.size() != 80 :
-                lock()
-        return
+            else:
+                print('list is full,producer waiting')
+                s.release()
+                print ("Space in queue, Consumer notified the producer")
 
 class ConsumerThread(threading.Thread):
     def __init__(self, group=None, target=None, name=None,
@@ -32,29 +39,42 @@ class ConsumerThread(threading.Thread):
         self.name = name
 
     def run(self):
+        
         while True:
-            if len(qu) > 0:
+            s.acquire()
+            if qu:
                 f = open('data.txt' , 'a+')
                 # item = q.dequeue()
                 # q.dequeue()
-                item = qu[-1]
-                qu.pop()
+                item = qu[0]
+                qu.pop(0)
                 f.write(str(item)+",")
                 f.close()
                 print('Getting {} elements in queue'.format(len(qu)) )
+                s.release()
                 time.sleep(random.random())
             else :
-                lock()
+                print ("Producer added something to queue and notified the consumer")
+                s.release()
         return
 
-if __name__ == '__main__':
-    
-    prod_number = 10
-    cons_number = 10
-
-    p = ProducerThread(name='producer')
-    c = ConsumerThread(name='consumer')
-
-    
-    p.start()
+def runCons():
+    c = ConsumerThread(name = 'Consumer')
     c.start()
+def runProd():
+    p = ProducerThread(name = 'Producer')
+    p.start()
+if __name__ == '__main__':
+    cons_number = int(input('please, enter consumers number : '))
+    prod_number = int(input('please, enter producers number : '))
+    for x in range(cons_number) :
+        runCons()
+    for x in range(prod_number) :
+        runProd()
+
+    #semaphor - es anum minjev sax chanen lock , nuyn indexov datain chen karanq dimenq , petqa sinxronizaciya 
+
+    #deadlock kardal .   
+
+    
+    
