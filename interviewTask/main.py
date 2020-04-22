@@ -1,80 +1,95 @@
-import threading 
-from threading import Semaphore
+import threading as t
 import time
 import random 
+from queue import Queue
 
-lock = threading.Lock
 
-qu = []
-MAX_BUFF = 100
-s = Semaphore()
+MAX_QSIZE = 100
+BUFF_SIZE = 20
+# creating semaphore for multiprocessroing
+s = t.Semaphore(BUFF_SIZE)
+fill_count = t.Semaphore(0)
+empty_count = t.Semaphore(1000)
 
-class ProducerThread(threading.Thread):
-    def __init__(self, group=None, target=None, name=None,
-                 args=(), kwargs=None, verbose=None):
-        super(ProducerThread,self).__init__()
-        self.target = target
-        self.name = name
-        global queue
-        
+class ProducerThread:
+    def __init__(self, queue, buff_size=BUFF_SIZE):
+        self.queue = queue
+        self.buff_size = buff_size
+        self.s = s
+
 
     def run(self):
-        while True:
-            if len(qu) <= 100:
+        check = True
+        try:
+            while self.queue.qsize() < 100 and check == True:
+                empty_count.acquire()
                 item = random.randint(1,100)
-                qu.append(item)
-                print('Putting  {} elements in queue'.format(len(qu)) )
-                s.release()
+                fill_count.release()
+                self.queue.put(item)
+                print('Putting:  {} elements in queue'.format(self.queue.qsize()) )
                 time.sleep(random.random())
-            else:
-                print('list is full,producer waiting')
-                s.release()
-                print ("Space in queue, Consumer notified the producer")
+                if self.queue.qsize() == 100:
+                    print('Queue is full,producer waiting...')
+                    empty_count.release()
+                    
+            if self.queue.qsize() == 80 :
+                empty_count.acquire()
+                
+        except KeyboardInterrupt:
+            print('ok')
+        
 
-class ConsumerThread(threading.Thread):
-    def __init__(self, group=None, target=None, name=None,
-                 args=(), kwargs=None, verbose=None):
-        super(ConsumerThread,self).__init__()
-        self.target = target
-        self.name = name
+class ConsumerThread:
+    def __init__(self, queue):
+        self.queue = queue
+        self.s = s
 
     def run(self):
-        
-        while True:
-            s.acquire()
-            if qu:
+        try:
+            while not self.queue.empty():
+                item = self.queue.get()
                 f = open('data.txt' , 'a+')
-                # item = q.dequeue()
-                # q.dequeue()
-                item = qu[0]
-                qu.pop(0)
-                f.write(str(item)+",")
+                f.write(str(item))
                 f.close()
-                print('Getting {} elements in queue'.format(len(qu)) )
-                s.release()
+                empty_count.acquire()
+                fill_count.release()
+                self.queue.task_done()
+                print ('Getting: {} elements in queue'.format(self.queue.qsize()) )
                 time.sleep(random.random())
-            else :
-                print ("Producer added something to queue and notified the consumer")
-                s.release()
-        return
 
-def runCons():
-    c = ConsumerThread(name = 'Consumer')
-    c.start()
-def runProd():
-    p = ProducerThread(name = 'Producer')
-    p.start()
+            empty_count.release()
+            print ("consumer:Waiting...")
+        except KeyboardInterrupt:
+            print('ok')
+
+def main(prod_count,cons_conut):
+    q = Queue(maxsize=MAX_QSIZE)
+    
+    Producer_Thread_List = []
+    for i in range(prod_count):
+        producer = ProducerThread(q)
+        producer_thread = t.Thread(target=producer.run , name = f'poducer_{i}')
+        Producer_Thread_List.append(producer_thread)
+
+
+    Consumer_Thread_List = []
+    for i in range(cons_conut):
+        consumer = ConsumerThread(q)
+        consumer_thread = t.Thread(target=consumer.run , name = f'consumer_{i}')
+        Consumer_Thread_List.append(consumer_thread)
+
+    for elem in Producer_Thread_List:
+        elem.start()
+    for elem in Consumer_Thread_List:
+        elem.start()
+
+    q.join()
+
 if __name__ == '__main__':
-    cons_number = int(input('please, enter consumers number : '))
-    prod_number = int(input('please, enter producers number : '))
-    for x in range(cons_number) :
-        runCons()
-    for x in range(prod_number) :
-        runProd()
+    prod_count = int(input('Please enter number of producers : '))
+    cons_count = int(input('Please enter number of consumer : '))
 
-    #semaphor - es anum minjev sax chanen lock , nuyn indexov datain chen karanq dimenq , petqa sinxronizaciya 
-
-    #deadlock kardal .   
+    main(prod_count,cons_count)
 
     
     
